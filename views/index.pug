@@ -5,6 +5,7 @@ block content
   script.
     var setting_maxTxCount = parseInt("#{settings.api_page.public_apis.ext.getlasttxs.max_items_per_query}");
     var setting_txPerPage = parseInt("#{settings.index_page.transaction_table.items_per_page}");
+    var setting_txMinAmt = parseFloat("#{settings.index_page.last_txs_min_amount}");
     var lengthMenuOptsAdd = !{JSON.stringify(settings.index_page.transaction_table.page_length_options)};
     var lengthMenuOpts = [];
     var addedLength = false;
@@ -48,7 +49,7 @@ block content
         lengthMenu: lengthMenuOpts,
         scrollX: true,
         ajax: {
-          url: '/ext/getlasttxs/0',
+          url: '/ext/getlasttxs/' + setting_txMinAmt,
           beforeSend: function(jqXHR, settings) {
             settings.url = settings.url.substring(0, settings.url.indexOf('?')) + '/' + getParameterByName('start', settings.url) + '/' + getParameterByName('length', settings.url) + '/internal';
             return true;
