@@ -145,6 +145,13 @@ block content
                     div
                       em #{settings.locale.api_getsupply}
                     a(href='/api/getsupply') #{address}/api/getsupply
+              if settings.blockchain_specific.heavycoin.public_apis.getmaxsupply.enabled == true && settings.blockchain_specific.heavycoin.api_cmds['getmaxsupply'] != null && settings.blockchain_specific.heavycoin.api_cmds['getmaxsupply'] != ''
+                li
+                  p
+                    div.font-weight-bold getmaxsupply
+                    div
+                      em #{settings.locale.api_getmaxsupply}
+                    a(href='/api/getmaxsupply') #{address}/api/getmaxsupply
               if settings.blockchain_specific.heavycoin.public_apis.getnextrewardestimate.enabled == true && settings.blockchain_specific.heavycoin.api_cmds['getnextrewardestimate'] != null && settings.blockchain_specific.heavycoin.api_cmds['getnextrewardestimate'] != ''
                 li
                   p
