@@ -111,6 +111,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_sender
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_sender
                             else
                               =settings.locale.unknown_sender
                         td.table-danger.text-center #{ramountParts[0]}.
@@ -156,6 +158,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_recipient
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_recipient
                             else
                               =settings.locale.unknown_recipient
                         td.table-success.text-center #{ramountParts[0]}.
@@ -172,6 +176,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_recipient
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_recipient
                             else
                               =settings.locale.unknown_recipient
                   else
