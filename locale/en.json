@@ -33,6 +33,7 @@
   "tx_hash": "Tx Hash",
   "tx_address": "Address",
   "tx_nonstandard": "NONSTANDARD TX",
+  "tx_ring_size": "Ring Size",
   "view_raw_tx_data": "View Raw Transaction Data",
   "view_block": "View Block",
 

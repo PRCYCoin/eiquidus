@@ -204,7 +204,8 @@ app.use('/ext/gettx/:txid', function(req, res) {
                       total: total.toFixed(8),
                       timestamp: rtx.time,
                       blockhash: '-',
-                      blockindex: -1
+                      blockindex: -1,
+                      ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
                     };
 
                     res.send({ active: 'tx', tx: utx, confirmations: settings.shared_pages.confirmations, blockcount:-1});
@@ -216,7 +217,8 @@ app.use('/ext/gettx/:txid', function(req, res) {
                       total: total.toFixed(8),
                       timestamp: rtx.time,
                       blockhash: rtx.blockhash,
-                      blockindex: rtx.blockheight
+                      blockindex: rtx.blockheight,
+                      ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
                     };
 
                     lib.get_blockcount(function(blockcount) {

@@ -46,6 +46,7 @@ block content
             if settings.transaction_page.show_op_return == true
               th='OP_RETURN'
             th.text-center #{settings.locale.confirmations}
+            th.text-center #{settings.locale.tx_ring_size}
             th.text-center #{settings.locale.timestamp}
         tbody
           - var confirms = (blockcount - tx.blockindex + 1);
@@ -63,6 +64,8 @@ block content
               td.text-center.table-danger #{confirms}
             else
               td.text-center.table-warning #{confirms}
+            td.text-center
+              span #{tx.ringsize}
             td.text-center
               span#timestampCol
     if tx.vout.length < 1
