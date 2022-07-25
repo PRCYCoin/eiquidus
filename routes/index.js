@@ -164,7 +164,8 @@ function route_get_tx(res, txid) {
                       total: total.toFixed(8),
                       timestamp: rtx.time,
                       blockhash: '-',
-                      blockindex: -1
+                      blockindex: -1,
+                      ringsize: rtx.ringsize
                     };
 
                     if (settings.claim_address_page.enabled == true) {
@@ -213,7 +214,8 @@ function route_get_tx(res, txid) {
                             total: total.toFixed(8),
                             timestamp: rtx.time,
                             blockhash: rtx.blockhash,
-                            blockindex: block.height
+                            blockindex: block.height,
+                            ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
                           };
 
                           lib.get_blockcount(function(blockcount) {
@@ -264,7 +266,8 @@ function route_get_tx(res, txid) {
                         total: total.toFixed(8),
                         timestamp: rtx.time,
                         blockhash: rtx.blockhash,
-                        blockindex: rtx.blockheight
+                        blockindex: rtx.blockheight,
+                        ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
                       };
 
                       lib.get_blockcount(function(blockcount) {

@@ -568,6 +568,8 @@
     //                              NOTE: Enabling this option will add hyperlinks to all Unknown Addresses and allow viewing of the /address/unknown_address page
     //                                    Disabling this option will display all Unknown Addresses in plain-text without a hyperlink and visiting the /address/unknown_address page will result in a 404 error
     "enable_unknown_address_view": false,
+    // use_stealth_wording: Determine whether to use "Stealth" in place of "Unknown"
+    "use_stealth_wording": false,
     // history_table: a collection of settings that pertain to the history table on the address page
     //                Table data is populated via the /ext/getaddresstxs api
     "history_table": {
@@ -1416,6 +1418,8 @@
         "getreward": "getreward",
         // getsupply: Returns the current money supply. This should be a positive whole or decimal number
         "getsupply": "getsupply",
+        // getmaxsupply: Returns the max money supply. This should be a positive whole or decimal number
+        "getmaxsupply": "getmaxsupply",
         // getnextrewardestimate: Returns an estimate for the next block reward based on the current state of decentralized voting. This should be a positive whole or decimal number
         "getnextrewardestimate": "getnextrewardestimate",
         // getnextrewardwhenstr: Returns a string describing how long until the votes are tallied and the next block reward is computed
@@ -1471,6 +1475,14 @@
         "getsupply": {
           // enabled: Enable/disable the /api/getsupply api endpoint (true/false)
           //          If set to false, the /api/getsupply api will be completely disabled for public use (no definition on the api page and a disabled error msg if you try to call the endpoint directly)
+          "enabled": true
+        },
+        // getmaxsupply: a collection of settings that pertain to the /api/getmaxsupply api endpoint
+        //            Returns the current money supply
+        //            NOTE: This api is not used internally and is therefore only publicly available
+        "getmaxsupply": {
+          // enabled: Enable/disable the /api/getmaxsupply api endpoint (true/false)
+          //          If set to false, the /api/getmaxsupply api will be completely disabled for public use (no definition on the api page and a disabled error msg if you try to call the endpoint directly)
           "enabled": true
         },
         // getnextrewardestimate: a collection of settings that pertain to the /api/getnextrewardestimate api endpoint

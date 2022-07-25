@@ -69,7 +69,7 @@ block content
             th.text-center #{settings.locale.difficulty}
             th.text-center #{settings.locale.confirmations}
             if settings.blockchain_specific.heavycoin.enabled == true
-              th.text-center Vote
+              th.text-center Block Type
             th.text-center #{settings.locale.size} (kB)
             th.text-center #{settings.locale.bits}
             th.text-center #{settings.locale.nonce}
@@ -90,7 +90,12 @@ block content
             else
               td.text-center.table-warning=block.confirmations
             if settings.blockchain_specific.heavycoin.enabled == true
-              td.text-center=block.vote
+            if splitDifficulty[0] == "0" && splitDifficulty[1] == "0014"
+              td.text-center PoA
+            else if block.height >= 500
+              td.text-center PoS
+            else
+              td.text-center PoW
             td.text-center #{splitBlockSize[0]}.
               span.decimal #{splitBlockSize[1]}
             td.text-center=block.bits

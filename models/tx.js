@@ -9,6 +9,7 @@ var TxSchema = new Schema({
   timestamp: { type: Number, default: 0, index: true },
   blockhash: { type: String, index: true },
   blockindex: {type: Number, default: 0, index: true},
+  ringsize: { type: Number, default: 0 },
   tx_type: { type: String, default: null },
   op_return: { type: String, default: null }
 }, {id: false});

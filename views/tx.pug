@@ -46,6 +46,7 @@ block content
             if settings.transaction_page.show_op_return == true
               th='OP_RETURN'
             th.text-center #{settings.locale.confirmations}
+            th.text-center #{settings.locale.tx_ring_size}
             th.text-center #{settings.locale.timestamp}
         tbody
           - var confirms = (blockcount - tx.blockindex + 1);
@@ -63,6 +64,8 @@ block content
               td.text-center.table-danger #{confirms}
             else
               td.text-center.table-warning #{confirms}
+            td.text-center
+              span #{tx.ringsize}
             td.text-center
               span#timestampCol
     if tx.vout.length < 1
@@ -111,6 +114,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_sender
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_sender
                             else
                               =settings.locale.unknown_sender
                         td.table-danger.text-center #{ramountParts[0]}.
@@ -156,6 +161,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_recipient
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_recipient
                             else
                               =settings.locale.unknown_recipient
                         td.table-success.text-center #{ramountParts[0]}.
@@ -172,6 +179,8 @@ block content
                             if settings.address_page.enable_unknown_address_view == true
                               a.breakWord(href='/address/unknown_address')
                                 =settings.locale.unknown_recipient
+                            else if settings.address_page.use_stealth_wording == true
+                              =settings.locale.stealth_recipient
                             else
                               =settings.locale.unknown_recipient
                   else
