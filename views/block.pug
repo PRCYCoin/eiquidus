@@ -90,12 +90,7 @@ block content
             else
               td.text-center.table-warning=block.confirmations
             if settings.blockchain_specific.heavycoin.enabled == true
-            if splitDifficulty[0] == "0" && splitDifficulty[1] == "0014"
-              td.text-center PoA
-            else if block.height >= 500
-              td.text-center PoS
-            else
-              td.text-center PoW
+            td.text-center #{block.minetype}
             td.text-center #{splitBlockSize[0]}.
               span.decimal #{splitBlockSize[1]}
             td.text-center=block.bits
