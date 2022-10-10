@@ -112,6 +112,7 @@ block content
               th.text-center #{settings.locale.tx_recipients}
               th.text-center #{settings.locale.mkt_amount}
                 span.small.fw-normal  (#{settings.coin.symbol})
+              th.text-center #{settings.locale.tx_ring_size}
           tbody
             each txn in txs
               tr
@@ -131,3 +132,4 @@ block content
                   - var totalParts = total.split('.');
                   td.text-center #{totalParts[0]}.
                     span.decimal #{totalParts[1]}
+                td.text-center #{txn.ringsize}
