@@ -117,6 +117,13 @@ html(lang='en')
           - showNethashChart = true
         if settings.claim_address_page.show_difficulty_chart == true
           - showDifficultyChart = true
+      when 'orphans'
+        if settings.orphans_page.show_panels == true
+          - showPanels = true
+        if settings.orphans_page.show_nethash_chart == true
+          - showNethashChart = true
+        if settings.orphans_page.show_difficulty_chart == true
+          - showDifficultyChart = true
       when 'reward'
         if settings.blockchain_specific.heavycoin.reward_page.show_panels == true
           - showPanels = true
@@ -669,7 +676,7 @@ html(lang='en')
         }
         function getCoinSupplyPanel() {
           var supplyType='<label id="supply"></label>';
-          return '<div class="card-header"><strong>#{settings.locale.ex_supply} <span class="small fw-normal">(#{settings.coin.symbol})</span></strong></div><div class="card-body"><div id="supplyPanelLoading" class="header-panel"><i class="fa fa-spinner fa-pulse"></i></div><div id="supplypanel" class="header-panel" style="display:none;"><span class="fa fa-chart-pie"></span>'+supplyType+'</div></div>';
+          return `<div class="card-header"><strong>#{settings.locale.ex_supply} <span class="small fw-normal">(${"#{settings.coin.symbol}".replace(/"/g, '&quot;')})</span></strong></div><div class="card-body"><div id="supplyPanelLoading" class="header-panel"><i class="fa fa-spinner fa-pulse"></i></div><div id="supplypanel" class="header-panel" style="display:none;"><span class="fa fa-chart-pie"></span>${supplyType}</div></div>`;
         }
         function getPricePanel() {
           var priceType='<label id="lastPrice">-</label>';
@@ -679,7 +686,7 @@ html(lang='en')
           return '<div class="card-header"><strong>Market Cap <span class="small fw-normal">(#{settings.markets_page.default_exchange.trading_pair.split('/')[1]})</span></strong></div><div class="card-body"><div id="marketCapPanelLoading" class="header-panel"><i class="fa fa-spinner fa-pulse"></i></div><div id="marketCapPanel" class="header-panel" style="display:none;"><span class="fas fa-chart-line"></span><label id="marketCap"></label></div></div>';
         }
         function getLogoPanel() {
-          return '<img src="#{settings.shared_pages.logo}" style="margin-top:-15px;height:128px;" alt="#{settings.coin.name} Logo" title="#{settings.coin.name} Logo" />';
+          return `<img src="#{settings.shared_pages.logo}" style="margin-top:-15px;height:128px;" alt="${"#{settings.coin.name}".replace(/"/g, '&quot;')} Logo" title="${"#{settings.coin.name}".replace(/"/g, '&quot;')} Logo" />`;
         }
         function getActivePanel(panelName) {
           var sReturn='';
@@ -1135,6 +1142,11 @@ html(lang='en')
                     a.nav-link(href='/claim')
                       span.far.fa-address-card
                       span.margin-left-5 #{settings.locale.menu_claim_address}
+                if settings.orphans_page.enabled == true
+                  li#orphans.nav-item
+                    a.nav-link(href='/orphans')
+                      span.far.fa-window-close
+                      span.margin-left-5 #{settings.locale.menu_orphans}
             if settings.shared_pages.page_header.search.enabled == true && settings.shared_pages.page_header.search.position.toString().toLowerCase() == 'inside-header'
               span#search-header-span(alt='Search', title='Search', data-bs-toggle='tooltip', data-bs-placement='left')
                 button#search-header-button(data-bs-toggle='collapse', data-bs-target='#search-navbar-collapse')
@@ -1247,6 +1259,11 @@ html(lang='en')
                   a.nav-link(href='/claim')
                     span.nav-icon.far.fa-address-card
                     span.margin-left-5 #{settings.locale.menu_claim_address}
+              if settings.orphans_page.enabled == true
+                li#orphans.nav-item(alt=settings.locale.menu_orphans, title=settings.locale.menu_orphans, data-bs-toggle='tooltip', data-bs-placement='right')
+                  a.nav-link(href='/orphans')
+                    span.nav-icon.far.fa-window-close
+                    span.margin-left-5 #{settings.locale.menu_orphans}
         div#side-offcanvas.offcanvas.offcanvas-start(tabindex='-1')
           div.offcanvas-body.d-block.navbar(class=sideBarClasses)
       div#main-container(class=mainContainerClasses)
