@@ -47,6 +47,10 @@
       // port: Port # to configure the express webserver to listen for https requests on
       //       NOTE: Be sure to configure firewalls to allow traffic through this port or the explorer website may not be accessible remotely
       "port": 443,
+      // always_redirect: Force all explorer traffic to use https
+      //                  If set to true, all http web requests will automatically be forwarded to https
+      //                  If set to false, the webserver will allow both http and https traffic
+      "always_redirect": true,
       // cert_file: The absolute or relative path to the tls certificate file. Typically this file will be generated from certbot (read more: https://certbot.eff.org)
       "cert_file": "/etc/letsencrypt/live/domain-name-here/cert.pem",
       // chain_file: The absolute or relative path to the tls chain file. Typically this file will be generated from certbot (read more: https://certbot.eff.org)
@@ -1377,6 +1381,8 @@
     // use_rpc: Determine whether to call rpc api cmds directly using the faster rpc method or using the older method via internal http api (true/false)
     //          NOTE: This should always be set to true unless there is a specific need to test or log certain apis
     "use_rpc": true,
+    // rpc_concurrent_tasks: The maximum number of rpc cmds that can be run simultaneously. Additional rpc cmds will go into a queue and be run on a first-in-first-out basis
+    "rpc_concurrent_tasks": 1,
     // getnetworkhashps: Returns the estimated network hashes per second. This should be a positive whole number
     "getnetworkhashps": "getnetworkhashps",
     // getmininginfo: Returns a json object containing mining-related information

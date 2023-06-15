@@ -19,7 +19,7 @@ const { exec } = require('child_process');
 nodeapi.setWalletDetails(settings.wallet);
 // dynamically build the nodeapi cmd access list by adding all non-blockchain-specific api cmds that have a value
 Object.keys(settings.api_cmds).forEach(function(key, index, map) {
-  if (key != 'use_rpc' && settings.api_cmds[key] != null && settings.api_cmds[key] != '')
+  if (key != 'use_rpc' && key != 'rpc_concurrent_tasks' && settings.api_cmds[key] != null && settings.api_cmds[key] != '')
     apiAccessList.push(key);
 });
 // dynamically find and add additional blockchain_specific api cmds
@@ -33,8 +33,26 @@ Object.keys(settings.blockchain_specific).forEach(function(key, index, map) {
     });
   }
 });
+
 // whitelist the cmds in the nodeapi access list
 nodeapi.setAccess('only', apiAccessList);
+
+// determine if http traffic should be forwarded to https
+if (settings.webserver.tls.enabled == true && settings.webserver.tls.always_redirect == true) {
+  app.use(function(req, res, next) {
+    if (req.secure) {
+      // continue without redirecting
+      next();
+    } else {
+      // add webserver port to the host value if it does not already exist
+      const host = req.headers.host + (req.headers.host.indexOf(':') > -1 ? '' : ':' + settings.webserver.port.toString());
+
+      // redirect to the correct https page
+      res.redirect(301, 'https://' + host.replace(':' + settings.webserver.port.toString(), (settings.webserver.tls.port != 443 ? ':' + settings.webserver.tls.port.toString() : '')) + req.url);
+    }
+  });
+}
+
 // determine if cors should be enabled
 if (settings.webserver.cors.enabled == true) {
   app.use(function(req, res, next) {
@@ -44,6 +62,7 @@ if (settings.webserver.cors.enabled == true) {
     next();
   });
 }
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
@@ -843,25 +862,12 @@ app.use(function(req, res, next) {
     next(err);
 });
 
-// development error handler
-// will print stacktrace
-if (app.get('env') === 'development') {
-  app.use(function(err, req, res, next) {
-    res.status(err.status || 500);
-    res.render('error', {
-      message: err.message,
-      error: err
-    });
-  });
-}
-
-// production error handler
-// no stacktraces leaked to user
+// error handler - will print stacktrace when in development mode, otherwise no stacktraces will be leaked to the user
 app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error', {
     message: err.message,
-    error: {}
+    error: (app.get('env') === 'development' ? err : {})
   });
 });
 
