@@ -646,6 +646,29 @@ app.use('/ext/getorphanlist/:start/:length', function(req, res) {
     res.end('This method is disabled');
 });
 
+// get the last updated date for a particular section
+app.use('/ext/getlastupdated/:section', function(req, res) {
+  // check the headers to see if it matches an internal ajax request from the explorer itself (TODO: come up with a more secure method of whitelisting ajax calls from the explorer)
+  if (req.headers['x-requested-with'] != null && req.headers['x-requested-with'].toLowerCase() == 'xmlhttprequest' && req.headers.referer != null && req.headers.accept.indexOf('text/javascript') > -1 && req.headers.accept.indexOf('application/json') > -1) {
+    // fix parameters
+    if (req.params.section == null)
+      req.params.section = '';
+
+    switch (req.params.section.toLowerCase()) {
+      case 'blockchain':
+      case 'movement':
+        // lookup last updated date
+        db.get_stats(settings.coin.name, function (stats) {
+          res.json({'last_updated_date': stats.blockchain_last_updated});
+        });
+        break;
+      default:
+        res.send({error: 'Cannot find last updated date'});
+    }
+  } else
+    res.end('This method is disabled');
+});
+
 app.use('/ext/getnetworkchartdata', function(req, res) {
   db.get_network_chart_data(function(data) {
     if (data)
@@ -833,7 +856,10 @@ var panelcount = (settings.shared_pages.page_header.panels.network_panel.enabled
   (settings.shared_pages.page_header.panels.coin_supply_panel.enabled == true && settings.shared_pages.page_header.panels.coin_supply_panel.display_order > 0 ? 1 : 0) +
   (settings.shared_pages.page_header.panels.price_panel.enabled == true && settings.shared_pages.page_header.panels.price_panel.display_order > 0 ? 1 : 0) +
   (settings.shared_pages.page_header.panels.market_cap_panel.enabled == true && settings.shared_pages.page_header.panels.market_cap_panel.display_order > 0 ? 1 : 0) +
-  (settings.shared_pages.page_header.panels.logo_panel.enabled == true && settings.shared_pages.page_header.panels.logo_panel.display_order > 0 ? 1 : 0);
+  (settings.shared_pages.page_header.panels.logo_panel.enabled == true && settings.shared_pages.page_header.panels.logo_panel.display_order > 0 ? 1 : 0) +
+  (settings.shared_pages.page_header.panels.spacer_panel_1.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_1.display_order > 0 ? 1 : 0) +
+  (settings.shared_pages.page_header.panels.spacer_panel_2.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_2.display_order > 0 ? 1 : 0) +
+  (settings.shared_pages.page_header.panels.spacer_panel_3.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_3.display_order > 0 ? 1 : 0);
 app.set('paneloffset', paneltotal + 1 - panelcount);
 
 // determine panel order
@@ -846,6 +872,9 @@ if (settings.shared_pages.page_header.panels.coin_supply_panel.enabled == true &
 if (settings.shared_pages.page_header.panels.price_panel.enabled == true && settings.shared_pages.page_header.panels.price_panel.display_order > 0) panel_order.push({name: 'price_panel', val: settings.shared_pages.page_header.panels.price_panel.display_order});
 if (settings.shared_pages.page_header.panels.market_cap_panel.enabled == true && settings.shared_pages.page_header.panels.market_cap_panel.display_order > 0) panel_order.push({name: 'market_cap_panel', val: settings.shared_pages.page_header.panels.market_cap_panel.display_order});
 if (settings.shared_pages.page_header.panels.logo_panel.enabled == true && settings.shared_pages.page_header.panels.logo_panel.display_order > 0) panel_order.push({name: 'logo_panel', val: settings.shared_pages.page_header.panels.logo_panel.display_order});
+if (settings.shared_pages.page_header.panels.spacer_panel_1.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_1.display_order > 0) panel_order.push({name: 'spacer_panel_1', val: settings.shared_pages.page_header.panels.spacer_panel_1.display_order});
+if (settings.shared_pages.page_header.panels.spacer_panel_2.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_2.display_order > 0) panel_order.push({name: 'spacer_panel_2', val: settings.shared_pages.page_header.panels.spacer_panel_2.display_order});
+if (settings.shared_pages.page_header.panels.spacer_panel_3.enabled == true && settings.shared_pages.page_header.panels.spacer_panel_3.display_order > 0) panel_order.push({name: 'spacer_panel_3', val: settings.shared_pages.page_header.panels.spacer_panel_3.display_order});
 
 panel_order.sort(function(a,b) { return a.val - b.val; });
 
@@ -873,18 +902,40 @@ app.use(function(err, req, res, next) {
 
 // determine if tls features should be enabled
 if (settings.webserver.tls.enabled == true) {
+  function readCertsSync() {
+    var tls_options = {};
+
+    try {
+      tls_options = {
+        key: db.fs.readFileSync(settings.webserver.tls.key_file),
+        cert: db.fs.readFileSync(settings.webserver.tls.cert_file),
+        ca: db.fs.readFileSync(settings.webserver.tls.chain_file)
+      };
+    } catch(e) {
+      console.warn('There was a problem reading tls certificates. Check that the certificate, chain and key paths are correct.');
+    }
+
+    return tls_options;
+  }
+
+  const https = require('https');
+  let httpd = https.createServer(readCertsSync(), app).listen(settings.webserver.tls.port);
+
   try {
-    var tls_options = {
-      key: db.fs.readFileSync(settings.webserver.tls.key_file),
-      cert: db.fs.readFileSync(settings.webserver.tls.cert_file),
-      ca: db.fs.readFileSync(settings.webserver.tls.chain_file)
-    };
+    let waitForCertsToRefresh;
+
+    // watch for changes to the certificate directory
+    db.fs.watch(path.dirname(settings.webserver.tls.key_file), () => {
+      clearTimeout(waitForCertsToRefresh);
+
+      // refresh certificates as they are changed on disk
+      waitForCertsToRefresh = setTimeout(() => {
+        httpd.setSecureContext(readCertsSync());
+      }, 1000);
+    });
   } catch(e) {
     console.warn('There was a problem reading tls certificates. Check that the certificate, chain and key paths are correct.');
   }
-
-  var https = require('https');
-  https.createServer(tls_options, app).listen(settings.webserver.tls.port);
 }
 
 // get the latest git commit id (if exists)
