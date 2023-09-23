@@ -99,7 +99,6 @@ Table of Contents
     - [FreiExchange](https://freiexchange.com)/[FreiXLite](https://freixlite.com) *\*no chart support due to a lack of OHLCV api data*
     - [Poloniex](https://poloniex.com)
     - [SouthXchange](https://southxchange.com)
-    - [Txbit](https://txbit.io) *\*no chart support due to a lack of OHLCV api data*
     - [Unnamed](https://unnamed.exchange)
     - [Xeggex](https://xeggex.com) *\*no chart support due to a lack of OHLCV api data*
     - [Yobit](https://yobit.io) *\*no chart support due to a lack of OHLCV api data*
