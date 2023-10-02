@@ -1065,6 +1065,57 @@ function occurrences(string, subString, allowOverlapping) {
   return n;
 }
 
+function block_sync(reindex, stats) {
+  // Get the last synced block index value
+  var last = (stats.last ? stats.last : 0);
+  // Get the total number of blocks
+  var count = (stats.count ? stats.count : 0);
+
+  // Check if the sync msg should be shown
+  check_show_sync_message(count - last);
+
+  update_tx_db(settings.coin.name, last, count, stats.txes, settings.sync.update_timeout, 0, function() {
+    // check if the script stopped prematurely
+    if (stopSync) {
+      console.log(`${(reindex ? 'Reindex' : 'Block sync')} was stopped prematurely`);
+      exit(1);
+    } else {
+      // update blockchain_last_updated value
+      db.update_last_updated_stats(settings.coin.name, { blockchain_last_updated: Math.floor(new Date() / 1000) }, function(cb) {
+        // fix data from orphaned blocks
+        update_orphans(stats.orphan_index, stats.orphan_current, count, settings.sync.update_timeout, function() {
+          // check if the script stopped prematurely
+          if (stopSync) {
+            console.log(`${(reindex ? 'Reindex' : 'Block sync')} was stopped prematurely`);
+            exit(1);
+          } else {
+            db.update_richlist('received', function() {
+              db.update_richlist('balance', function() {
+                // update richlist_last_updated value
+                db.update_last_updated_stats(settings.coin.name, { richlist_last_updated: Math.floor(new Date() / 1000) }, function(cb) {                              
+                  db.get_stats(settings.coin.name, function(nstats) {
+                    // check for and update heavycoin data if applicable
+                    update_heavy(settings.coin.name, count, 20, settings.blockchain_specific.heavycoin.enabled, function(heavy) {
+                      // check for and update network history data if applicable
+                      update_network_history(nstats.last, settings.network_history.enabled, function(network_hist) {
+                        // always check for and remove the sync msg if exists
+                        db.remove_sync_message();
+
+                        console.log(`${(reindex ? 'Reindex' : 'Block sync')} complete (block: %s)`, nstats.last);
+                        exit(0);
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          }
+        });
+      });
+    }
+  });
+}
+
 // check options
 if (process.argv[2] == null || process.argv[2] == 'index' || process.argv[2] == 'update') {
   mode = null;
@@ -1089,30 +1140,7 @@ if (process.argv[2] == null || process.argv[2] == 'index' || process.argv[2] == 
 
       break;
     case 'reindex':
-      // check if readlinesync module is installed
-      if (!db.fs.existsSync('./node_modules/readline-sync')) {
-        const { execSync } = require('child_process');
-
-        console.log('Installing missing packages.. Please wait..');
-
-        // install updated packages
-        execSync('npm update');
-      }
-
-      const readlineSync = require('readline-sync');
-
-      console.log('You are about to delete all blockchain data (transactions and addresses)');
-      console.log('and resync from the genesis block.');
-
-      // prompt for the reindex
-      if (readlineSync.keyInYN('Are you sure you want to do this? ')) {
-        // set mode to 'reindex'
-        mode = 'reindex';
-      } else {
-        console.log('Process aborted. Nothing was deleted');
-        exit(2);
-      }
-
+      mode = 'reindex';
       break;
     case 'reindex-rich':
       mode = 'reindex-rich';
@@ -1162,107 +1190,32 @@ if (lib.is_locked([database]) == false) {
             console.log('Run \'npm start\' to create database structures before running this script.');
             exit(1);
           } else {
-            db.update_db(settings.coin.name, function(stats) {
-              // check if stats returned properly
-              if (stats !== false) {
-                // determine which index mode to run
-                if (mode == 'reindex') {
-                  console.log('Deleting transactions.. Please wait..');
-                  Tx.deleteMany({}).then(() => {
-                    console.log('Transactions deleted successfully');
+            // determine which index mode to run
+            if (mode == 'reindex') {
+              const { execSync } = require('child_process');
 
-                    console.log('Deleting addresses.. Please wait..');
-                    Address.deleteMany({}).then(() => {
-                      console.log('Addresses deleted successfully');
+              try {
+                // delete the database
+                execSync(`node ./scripts/delete_database.js ${mode}`, {stdio : 'inherit'});
+              } catch (err) {
+                // delete_database.js was not successful, so exit
+                exit(1);
+              }
 
-                      console.log('Deleting address transactions.. Please wait..');
-                      AddressTx.deleteMany({}).then(() => {
-                        console.log('Address transactions deleted successfully');
-
-                        console.log('Deleting top 100 data.. Please wait..');
-                        Richlist.updateOne({coin: settings.coin.name}, {
-                          received: [],
-                          balance: []
-                        }).then(() => {
-                          console.log('Top 100 data deleted successfully');
-
-                          console.log('Deleting block index.. Please wait..');
-                          Stats.updateOne({coin: settings.coin.name}, {
-                            last: 0,
-                            supply: 0,
-                            txes: 0,
-                            blockchain_last_updated: 0,
-                            richlist_last_updated: 0,
-                            orphan_index: 0,
-                            orphan_current: 0
-                          }).then(() => {
-                            console.log('Block index deleted successfully');
-
-                            // Check if the sync msg should be shown
-                            check_show_sync_message(stats.count);
-
-                            console.log('Starting resync of blockchain data.. Please wait..');
-                            update_tx_db(settings.coin.name, block_start, stats.count, 0, settings.sync.update_timeout, 0, function() {
-                              // check if the script stopped prematurely
-                              if (stopSync) {
-                                console.log('Reindex was stopped prematurely');
-                                exit(1);
-                              } else {
-                                // update blockchain_last_updated value
-                                db.update_last_updated_stats(settings.coin.name, { blockchain_last_updated: Math.floor(new Date() / 1000) }, function(cb) {
-                                  // fix data from orphaned blocks
-                                  update_orphans(0, 0, stats.count, settings.sync.update_timeout, function() {
-                                    // check if the script stopped prematurely
-                                    if (stopSync) {
-                                      console.log('Reindex was stopped prematurely');
-                                      exit(1);
-                                    } else {
-                                      db.update_richlist('received', function() {
-                                        db.update_richlist('balance', function() {
-                                          // update richlist_last_updated value
-                                          db.update_last_updated_stats(settings.coin.name, { richlist_last_updated: Math.floor(new Date() / 1000) }, function(cb) {
-                                            db.get_stats(settings.coin.name, function(nstats) {
-                                              // check for and update heavycoin data if applicable
-                                              update_heavy(settings.coin.name, stats.count, 20, settings.blockchain_specific.heavycoin.enabled, function(heavy) {
-                                                // check for and update network history data if applicable
-                                                update_network_history(nstats.last, settings.network_history.enabled, function(network_hist) {
-                                                  // always check for and remove the sync msg if exists
-                                                  db.remove_sync_message();
-
-                                                  console.log('Reindex complete (block: %s)', nstats.last);
-                                                  exit(0);
-                                                });
-                                              });
-                                            });
-                                          });
-                                        });
-                                      });
-                                    }
-                                  });
-                                });
-                              }
-                            });
-                          }).catch((err) => {
-                            console.log(err);
-                            exit(1);
-                          });
-                        }).catch((err) => {
-                          console.log(err);
-                          exit(1);
-                        });
-                      }).catch((err) => {
-                        console.log(err);
-                        exit(1);
-                      });
-                    }).catch((err) => {
-                      console.log(err);
-                      exit(1);
-                    });
-                  }).catch((err) => {
-                    console.log(err);
-                    exit(1);
-                  });
-                } else if (mode == 'check') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
+                  // start the block sync
+                  block_sync(true, stats);
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
+                }
+              });
+            } else if (mode == 'check') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
                   console.log('Checking blocks.. Please wait..');
 
                   update_tx_db(settings.coin.name, block_start, stats.count, stats.txes, settings.sync.check_timeout, 1, function() {
@@ -1277,55 +1230,26 @@ if (lib.is_locked([database]) == false) {
                       });
                     }
                   });
-                } else if (mode == 'update') {
-                  // Get the last synced block index value
-                  var last = (stats.last ? stats.last : 0);
-                  // Get the total number of blocks
-                  var count = (stats.count ? stats.count : 0);
-                  // Check if the sync msg should be shown
-                  check_show_sync_message(count - last);
-
-                  update_tx_db(settings.coin.name, last, count, stats.txes, settings.sync.update_timeout, 0, function() {
-                    // check if the script stopped prematurely
-                    if (stopSync) {
-                      console.log('Block sync was stopped prematurely');
-                      exit(1);
-                    } else {
-                      // update blockchain_last_updated value
-                      db.update_last_updated_stats(settings.coin.name, { blockchain_last_updated: Math.floor(new Date() / 1000) }, function(cb) {
-                        // fix data from orphaned blocks
-                        update_orphans(stats.orphan_index, stats.orphan_current, count, settings.sync.update_timeout, function() {
-                          // check if the script stopped prematurely
-                          if (stopSync) {
-                            console.log('Block sync was stopped prematurely');
-                            exit(1);
-                          } else {
-                            db.update_richlist('received', function() {
-                              db.update_richlist('balance', function() {
-                                // update richlist_last_updated value
-                                db.update_last_updated_stats(settings.coin.name, { richlist_last_updated: Math.floor(new Date() / 1000) }, function(cb) {                              
-                                  db.get_stats(settings.coin.name, function(nstats) {
-                                    // check for and update heavycoin data if applicable
-                                    update_heavy(settings.coin.name, count, 20, settings.blockchain_specific.heavycoin.enabled, function(heavy) {
-                                      // check for and update network history data if applicable
-                                      update_network_history(nstats.last, settings.network_history.enabled, function(network_hist) {
-                                        // always check for and remove the sync msg if exists
-                                        db.remove_sync_message();
-
-                                        console.log('Block sync complete (block: %s)', nstats.last);
-                                        exit(0);
-                                      });
-                                    });
-                                  });
-                                });
-                              });
-                            });
-                          }
-                        });
-                      });
-                    }
-                  });
-                } else if (mode == 'reindex-rich') {
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
+                }
+              });
+            } else if (mode == 'update') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
+                  // start the block sync
+                  block_sync(false, stats);
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
+                }
+              });
+            } else if (mode == 'reindex-rich') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
                   console.log('Check richlist');
 
                   db.check_richlist(settings.coin.name, function(exists) {
@@ -1353,7 +1277,15 @@ if (lib.is_locked([database]) == false) {
                       });
                     });
                   });
-                } else if (mode == 'reindex-txcount') {
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
+                }
+              });
+            } else if (mode == 'reindex-txcount') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
                   console.log('Calculating tx count.. Please wait..');
 
                   // Resetting the transaction counter requires a single lookup on the txes collection to find all txes that have a positive or zero total and 1 or more vout
@@ -1372,7 +1304,15 @@ if (lib.is_locked([database]) == false) {
                     console.log(err);
                     exit(1);
                   });
-                } else if (mode == 'reindex-last') {
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
+                }
+              });
+            } else if (mode == 'reindex-last') {
+              db.update_db(settings.coin.name, function(stats) {
+                // check if stats returned properly
+                if (stats !== false) {
                   console.log('Finding last blockindex.. Please wait..');
 
                   // Resetting the last blockindex counter requires a single lookup on the txes collection to find the last indexed blockindex
@@ -1407,12 +1347,12 @@ if (lib.is_locked([database]) == false) {
                     console.log(err);
                     exit(1);
                   });
+                } else {
+                  // update_db threw an error so exit
+                  exit(1);
                 }
-              } else {
-                // update_db threw an error so exit
-                exit(1);
-              }
-            });
+              });
+            }
           }
         });
       } else if (database == 'peers') {
