@@ -104,10 +104,10 @@ Table of Contents
     - [AltMarkets](https://altmarkets.io)
     - [Dex-Trade](https://dex-trade.com)
     - [FreiExchange](https://freiexchange.com)/[FreiXLite](https://freixlite.com) *\*no chart support due to a lack of OHLCV api data*
+    - [NonKyc](https://nonkyc.io)
     - [Poloniex](https://poloniex.com)
-    - [SouthXchange](https://southxchange.com)
-    - [Xeggex](https://xeggex.com) *\*no chart support due to a lack of OHLCV api data*
-    - [Yobit](https://yobit.io) *\*no chart support due to a lack of OHLCV api data*
+    - [Xeggex](https://xeggex.com)
+    - [Yobit](https://yobit.net) *\*no chart support due to a lack of OHLCV api data*
   - **API:** A listing of available public API's that can be used to retrieve information from the network without the need for a local wallet. The following public API's are supported:
     - **RPC API calls** (Return data from coind)
       - **getdifficulty:** Returns the current difficulty
