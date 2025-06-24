@@ -8,11 +8,13 @@
 
 Written in node.js and mongodb, eIquidus is the most stable, secure, customizable and feature-rich open-source block explorer with support for virtually any altcoin that implements some form of the [Bitcoin RPC API protocol](https://developer.bitcoin.org/reference/rpc/index.html) (EVM blockchains such as ETH, BNB, etc. are not supported). Originally built for the [Exor blockchain](https://github.com/team-exor/exor), eIquidus has since grown into a fully-featured explorer with a focus on stability and security at its core. All features from the [original iquidus explorer](https://github.com/iquidus/explorer) are included here along with many new ideas from other iquidus forks, and an absolute ton of new custom changes and bug fixes that were developed specifically for eIquidus.
 
-![Homepage](public/img/screenshots/homepage-1-102-0.png)
+![Homepage](public/img/screenshots/homepage-1-103-0.png)
 
 ### Crowdfunding Program
 
 Exor accepts targeted donations in an effort to crowdfund various feature and improvement requests for the block explorer and other Exor-related projects. [Browse the list of unfunded tasks](https://exor.io/tasklist/hide-completed/hide-funded/show-unfunded/) and send Exor coins to the correct funding address to help meet the funding goal for tasks that you would like to see developed. Once the funding goal is met, Exor developers will begin work on the task asap and will remain a top priority until completed. If you are a software developer and would like to work on funded tasks in exchange for payment in EXOR, please get in touch with us using one of the [Developer Contact](#developer-contact) links below.
+
+**NEW:** Preliminary plugin support has been added. Help support the first plugin proposal for automatic snapshot creation. More info: [https://exor.io/task/181/b371d98f6217f2f533b3a0c9fedce7b200571c4f/](https://exor.io/task/181/b371d98f6217f2f533b3a0c9fedce7b200571c4f/)
 
 ### Premium Support
 
@@ -69,6 +71,7 @@ Table of Contents
   - [Backup Database Script](#backup-database-script)
   - [Restore Database Script](#restore-database-script)
   - [Delete Database Script](#delete-database-script)
+  - [Benchmark Script](#benchmark-script)
 - [Known Issues](#known-issues)
 - [Donations / Support Us](#donations--support-us)
 - [Special Thanks](#special-thanks)
@@ -84,15 +87,19 @@ Table of Contents
   - DataTables v1.13.6
   - Font Awesome v6.4.2
   - Luxon v3.4.3
-  - Chart.js v4.4.0
-    - chartjs-plugin-crosshair v2.0.0 ([https://github.com/abelheinsbroek/chartjs-plugin-crosshair](https://github.com/abelheinsbroek/chartjs-plugin-crosshair))
+  - Chart.js v4.4.7
+    - chartjs-plugin-crosshair v2.0.5
+      - Forked version with working sync feature: ([https://github.com/joeuhren/chartjs-plugin-crosshair](https://github.com/joeuhren/chartjs-plugin-crosshair))
+      - Original version: ([https://github.com/abelheinsbroek/chartjs-plugin-crosshair](https://github.com/abelheinsbroek/chartjs-plugin-crosshair))
     - chartjs-chart-financial v0.1.1 ([https://github.com/chartjs/chartjs-chart-financial](https://github.com/chartjs/chartjs-chart-financial))
     - chartjs-adapter-luxon v1.3.1 ([https://github.com/chartjs/chartjs-adapter-luxon](https://github.com/chartjs/chartjs-adapter-luxon))
+    - chartjs-plugin-annotation v3.1.0 ([https://github.com/chartjs/chartjs-plugin-annotation](https://github.com/chartjs/chartjs-plugin-annotation))
   - OverlayScrollbars v2.3.2
   - flag-icons v6.11.1 ([https://github.com/lipis/flag-icons](https://github.com/lipis/flag-icons))
-  - Intl.js (uses the v3.111.0 polyfill service to only download if using a browser that doesn't already support the ECMAScript Internationalization API)
+  - Intl.js (uses the v4.8.0 polyfill service to only download if using a browser that doesn't already support the ECMAScript Internationalization API)
 - Platform independent (tested to run on Windows, MacOS and Linux) **NOTE:** Most of the instructions in this guide were written for use with Linux and may need to be modified when using another OS
 - Mobile-friendly
+- Multi-threaded block sync
 - Sass support
 - Pages/features:
   - **Home/Explorer:** Displays latest blockchain transactions
@@ -100,9 +107,10 @@ Table of Contents
   - **Movement:** Displays latest blockchain transactions that are greater than a certain configurable amount
   - **Network:** Displays a list of peers that have connected to the coind wallet in the past 24 hours, along with useful addnode data that can be used to connect your own wallets to the network easier
   - **Top 100:** Displays the top 100 richest wallet addresses, the top 100 wallet addresses that have the highest total number of coins received based on adding up all received transactions, as well as a table and pie chart breakdown of wealth distribution. Additional support for omitting burned coins from top 100 lists
-  - **Markets:** Displays a number of exchange-related metrics including market summary, 24 hour chart, most recent buy/sell orders and latest trade history. Has the ability to integrate directly with exchange apis and/or the coingecko api from [https://www.coingecko.com/en/api](https://www.coingecko.com/en/api) to retrieve current market prices and convert to USD. The following 7 cryptocurrency exchanges are supported:
+  - **Markets:** Displays a number of exchange-related metrics including market summary, 24 hour chart, most recent buy/sell orders and latest trade history. Has the ability to integrate directly with exchange apis and/or the coingecko api from [https://www.coingecko.com/en/api](https://www.coingecko.com/en/api) to retrieve current market prices and convert to USD. The following 8 cryptocurrency exchanges are supported:
     - [AltMarkets](https://altmarkets.io)
     - [Dex-Trade](https://dex-trade.com)
+    - [Dexomy](https://dexomy.com)
     - [FreiExchange](https://freiexchange.com)/[FreiXLite](https://freixlite.com) *\*no chart support due to a lack of OHLCV api data*
     - [NonKyc](https://nonkyc.io)
     - [Poloniex](https://poloniex.com)
@@ -136,8 +144,8 @@ Table of Contents
       - **getmasternoderewardstotal:** Returns the total number of coins earned in masternode rewards for a specific address that arrived after a specific block height *\*only applicable to masternode coins*
   - **Claim Address:** Allows anyone to set custom display names for wallet addresses that they own using the **Sign Message** feature from their local wallet. Includes *bad word* filter support.
   - **Orphaned Blocks:** Displays a list of orphaned blocks with links to the next and previous "good" blocks
-  - **Block Info:** Displays block summary and list of transactions for a specific block height along with optional hash algorithm for multi-algo coins
-  - **Transaction Info:** Displays transaction summary, optional OP_RETURN value, list of input addresses and output addresses for a specific transaction
+  - **Block Info:** Displays block summary and list of transactions for a specific block height along with optional hash algorithm for multi-algo coins and optional list of wallet addresses that extracted/mined the block
+  - **Transaction Info:** Displays transaction summary, optional OP_RETURN value, optional list of wallet addresses that extracted/mined the coinbase transaction, list of input addresses and output addresses for a specific transaction
   - **Address Info:** Displays wallet address summary (balance, total sent, total received, QR code) and a list of latest transactions for a specific wallet address
 - Choose from 26 built-in themes with tweakable settings such as light and dark options to customize the look and feel of the explorer:
   - **Exor** *\*default theme made especially for eIquidus*
@@ -177,8 +185,8 @@ Table of Contents
   - **USD Market Cap:** Displays the current market cap value (value measured in USD)
   - **Logo:** Display an image of your coin logo
 - Configurable network charts that can be independently displayed in the header of any page
-  - **Hashrate chart:** Line graph listing of the estimated network hashes per second over the last number of blocks *\*Requires a full sync before network data will start being collected*
-  - **Difficulty chart:** Line graph listing of the block difficulty over the last number of blocks *\*Requires a full sync before network data will start being collected*
+  - **Hashrate chart:** Line graph listing of the estimated network hashes per second over the last number of blocks or hours *\*Requires a full sync before network data will start being collected*
+  - **Difficulty chart:** Line graph listing of the block difficulty over the last number of blocks or hours *\*Requires a full sync before network data will start being collected*
 - Add as many custom social links to the explorer footer as desired. Useful for linking to github, twitter, coinmarketcap or any other social media or external links as necessary. 
 - Custom rpc/api command support which increases blockchain compatibility. Supported cmds:
   - **getnetworkhashps:** Returns the estimated network hashes per second
@@ -865,33 +873,51 @@ cd /path/to/explorer && /path/to/node ./scripts/update_explorer.js "dependencies
 
 #### Backup Database Script
 
-Make a complete backup of an eIquidus mongo database and save to compressed file. A built-in locking mechanism prevents data from being updated or changed while a backup is in process. Backups can be safely created while the explorer is actively running and/or while the explorer is turned off. The following backup scenarios are supported:
+Make a complete backup of an eIquidus mongo database or single collection and save to compressed file. A built-in locking mechanism prevents data from being updated or changed while a backup is in process. Backups can be safely created while the explorer is actively running and/or while the explorer is turned off.
+
+Parameters:
+1. Backup path or filename (optional)
+2. Collection name (optional) **NOTE:** This parameter is useful for backing up a single database collection such as the `claimaddresses` or plugin-related collections that can later be restored into an existing database without affecting any other database collections.
+
+The following backup scenarios are supported:
 
 **Backup Database (No filename specified)**
 
-`npm run create-backup`: Backs up to the explorer/backups directory by default with the current date as the filename in the format  yyyy-MMM-dd.bak
+`npm run create-backup`: Backs up to the explorer/backups directory by default with the current date as the filename in the format yyyy-MMM-dd.bak
 
 **Backup Database (Partial filename specified)**
 
-`npm run create-backup test`: Backs up the the explorer/backups directory by default with the filename test.bak
+`npm run create-backup test`: Backs up the explorer/backups directory by default with the filename test.bak
 
 **Backup Database (Full filename specified)**
 
-`npm run create-backup today.bak`: Backs up the the explorer/backups directory by default with the filename today.bak
+`npm run create-backup today.bak`: Backs up the explorer/backups directory by default with the filename today.bak
 
 **Backup Database (Full path with partial filename specified)**
 
-`npm run create-backup /usr/local/bin/abc`: Backs up the the /usr/local/bin directory with the filename abc.bak
+`npm run create-backup /usr/local/bin/abc`: Backs up the /usr/local/bin directory with the filename abc.bak
 
 **Backup Database (Full path and filename specified)**
 
-`npm run create-backup ~/new.bak`: Backs up the the users home directory with the filename new.bak
+`npm run create-backup ~/new.bak`: Backs up the users home directory with the filename new.bak
+
+**Backup Database (Filename and collection both specified)**
+
+`npm run create-backup test claimaddresses`: Backs up only the `claimaddresses` collection to the explorer/backups directory by default with the filename test.bak
+
+**Backup Database (No filename specified, and backup a single collection only)**
+
+`npm run create-backup "" masternodes`: Backs up only the `masternodes` collection to the explorer/backups directory by default with the current date as the filename in the format yyyy-MMM-dd.bak 
 
 #### Restore Database Script
 
-Restore a previously saved eIquidus mongo database backup. :warning: **WARNING:** This will completely overwrite your existing eIquidus mongo database, so be sure to make a full backup before proceeding. A built-in locking mechanism prevents data from being updated or changed while a backup is being restored. Backups can be safely restored while the explorer is actively running and/or while the explorer is turned off.
+Restore a previously saved eIquidus mongo database backup. :warning: **WARNING:** Unless a single collection name is specified, this will completely overwrite your existing eIquidus mongo database, so be sure to make a full backup before proceeding. A built-in locking mechanism prevents data from being updated or changed while a backup is being restored. Backups can be safely restored while the explorer is actively running and/or while the explorer is turned off.
 
 **NOTE:** Older v1.x eIquidus database backups were compressed into tar.gz files. These older tar.gz backups can still be restored, but you must specifically add the .tar.gz suffix. Example: `npm run restore-backup /path/to/old_backup.tar.gz`
+
+Parameters:
+1. Backup path or filename (optional)
+2. Collection name (optional) **NOTE:** This parameter is useful for restoring a single database collection such as the `claimaddresses` or plugin-related collections without affecting any other database collections. This option can be used with a single collection backup or full database backup and will restore only the specified collection.
 
 The following restore scenarios are supported:
 
@@ -911,6 +937,10 @@ The following restore scenarios are supported:
 
 `npm run restore-backup ~/archive.bak`: Restores the ~/archive.bak file
 
+**Restore Database (Filename and collection both specified)**
+
+`npm run restore-backup test claimaddresses`: Restores only the `claimaddresses` collection from the explorer/scripts/backups/test.bak file
+
 #### Delete Database Script
 
 Wipe the eIquidus mongo database clean to start again from scratch. :warning: **WARNING:** This will completely destroy all data in your existing eIquidus mongo database, so be sure to make a full backup before proceeding. A built-in locking mechanism prevents data from being updated or changed while the database is being deleted. The process to delete the database can be executed while the explorer is actively running and/or while the explorer is turned off.
@@ -919,31 +949,15 @@ Delete the mongo database with the following command:
 
 `npm run delete-database`
 
+#### Benchmark Script
+
+This script is more of a debugging tool for developers which allows you to sync a certain amount of blocks (5000 blocks by default) to a separate mongodb database and output the total tx and address records synced along with the total time it took to complete. There is a `benchmark` section in the settings.json file that can be used to configure various benchmarking options.
+
+The benchmark script can be started with the following command:
+
+`npm run benchmark`
+
 ### Known Issues
-
-**exceeding stack size**
-
-```
-RangeError: Maximum call stack size exceeded
-```
-
-Nodes default stack size may be too small to index addresses with many tx's. If you experience the above error while running sync.js the stack size needs to be increased.
-
-To determine the default setting run:
-
-```
-node --v8-options | grep -B0 -A1 stack-size
-```
-
-To run a sync with a larger stack size launch with:
-
-```
-node --stack-size=[SIZE] scripts/sync.js index update
-```
-
-Where [SIZE] is an integer higher than the default.
-
-*note: SIZE will depend on which blockchain you are using, you may need to play around a bit to find an optimal setting*
 
 **Error: bind EACCES ...**
 
@@ -976,11 +990,12 @@ You can support us via one of the following options:
 - **[Alan Rudolf (aka suprnurd)](https://github.com/suprnurd):** for the custom changes found in the [Ciquidus explorer](https://github.com/suprnurd/ciquidus)
 - **[Tim Garrity (aka uaktags)](https://github.com/uaktags):** for his many contributions to the Iquidus explorer and custom features from the [uaktags explorer](https://github.com/uaktags/explorer)
 - **[TheHolyRoger](https://github.com/TheHolyRoger):** for his continued work and contributions to the Iquidus explorer
+- **[Karzo](https://github.com/KarzoGitHub):** for helping with the bulkwrite block sync code changes
 - All the rest of the Iquidus contributors who helped shape the Iquidus explorer in some way
 
 ### License
 
-Copyright (c) 2019-2023, The Exor Community<br />
+Copyright (c) 2019-2025, The Exor Community<br />
 Copyright (c) 2017, The Chaincoin Community<br />
 Copyright (c) 2015, Iquidus Technology<br />
 Copyright (c) 2015, Luke Williams<br />

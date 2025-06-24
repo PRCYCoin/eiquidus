@@ -4,15 +4,15 @@ var express = require('express'),
     favicon = require('serve-favicon'),
     logger = require('morgan'),
     cookieParser = require('cookie-parser'),
-    bodyParser = require('body-parser'),
     settings = require('./lib/settings'),
     routes = require('./routes/index'),
     lib = require('./lib/explorer'),
     db = require('./lib/database'),
-    package_metadata = require('./package.json'),
-    locale = require('./lib/locale');
+    package_metadata = require('./package.json');
 var app = express();
 var apiAccessList = [];
+var viewPaths = [path.join(__dirname, 'views')]
+var pluginRoutes = [];
 const { exec } = require('child_process');
 
 // pass wallet rpc connection info to nodeapi
@@ -63,8 +63,88 @@ if (settings.webserver.cors.enabled == true) {
   });
 }
 
+// loop through all plugins defined in the settings
+settings.plugins.allowed_plugins.forEach(function (plugin) {
+  // check if this plugin is enabled
+  if (plugin.enabled) {
+    const pluginName = (plugin.plugin_name == null ? '' : plugin.plugin_name);
+
+    // check if the plugin exists in the plugins directory
+    if (db.fs.existsSync(`./plugins/${pluginName}`)) {
+      // check if the plugin's local_plugin_settings file exists
+      if (db.fs.existsSync(`./plugins/${pluginName}/lib/local_plugin_settings.js`)) {
+        // load the local_plugin_settings.js file from the plugin
+        let localPluginSettings = require(`./plugins/${pluginName}/lib/local_plugin_settings`);
+
+        // loop through all local plugin settings
+        Object.keys(localPluginSettings).forEach(function(key, index, map) {
+          // check if this is a known setting type that should be brought into the main settings
+          if (key.endsWith('_page') && typeof localPluginSettings[key] === 'object' && localPluginSettings[key]['enabled'] == true) {
+            // this is a page setting
+            // add the page_id to the page setting
+            localPluginSettings[key].page_id = key;
+
+            // add the menu item title to the page setting
+            localPluginSettings[key].menu_title = localPluginSettings['localization'][`${key}_menu_title`];
+
+            // check if there is already a page for this plugin
+            if (plugin.pages == null) {
+              // initialize the pages array
+              plugin.pages = [];
+            }
+
+            // add this page setting to the main plugin data
+            plugin['pages'].push(localPluginSettings[key]);
+          } else if (key == 'public_apis') {
+            // this is a collection of new apis
+            // check if there is an ext section
+            if (localPluginSettings[key]['ext'] != null) {
+              // loop through all ext apis for this plugin
+              Object.keys(localPluginSettings[key]['ext']).forEach(function(extKey, extIndex, extMap) {
+                // add the name of the api into the object
+                localPluginSettings[key]['ext'][extKey]['api_name'] = extKey;
+
+                // loop through all parameters for this api and replace them in the description string if applicable
+                for (let p = 0; p < localPluginSettings[key]['ext'][extKey]['api_parameters'].length; p++)
+                  localPluginSettings['localization'][`${extKey}_description`] = localPluginSettings['localization'][`${extKey}_description`].replace(new RegExp(`\\{${(p + 1)}}`, 'g'), localPluginSettings[key]['ext'][extKey]['api_parameters'][p]['parameter_name']);
+
+                // add the localized api description into the object
+                localPluginSettings[key]['ext'][extKey]['api_desc'] = localPluginSettings['localization'][`${extKey}_description`];
+              });
+            }
+
+            // copy the entire public_apis section from the plugin into the main settings
+            plugin.public_apis = localPluginSettings[key];
+          }
+        });
+      }
+
+      // check if the plugin's routes/index.js file exists
+      if (db.fs.existsSync(`./plugins/${pluginName}/routes/index.js`)) {
+        // get the plugin routes and save them to an array
+        pluginRoutes.push(require(`./plugins/${pluginName}/routes/index`));
+
+        // check if the plugin has a views directory
+        if (db.fs.existsSync(`./plugins/${pluginName}/views`)) {
+          // get the list of files in the views directory
+          const files = db.fs.readdirSync(`./plugins/${pluginName}/views`);
+
+          // filter the list of files to check if any have the .pug extension
+          const pugFiles = files.filter(file => path.extname(file) === '.pug');
+
+          // check if the plugin has 1 or more views
+          if (pugFiles.length > 0) {
+            // add this plugins view path to the list of view paths
+            viewPaths.push(path.resolve(`./plugins/${pluginName}/views`));
+          }
+        }
+      }
+    }
+  }
+});
+
 // view engine setup
-app.set('views', path.join(__dirname, 'views'));
+app.set('views', viewPaths);
 app.set('view engine', 'pug');
 
 var default_favicon = '';
@@ -86,14 +166,19 @@ if (default_favicon != '')
   app.use(favicon(path.join('./public', default_favicon)));
 
 app.use(logger('dev'));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // routes
 app.use('/api', nodeapi.app);
 app.use('/', routes);
+
+// loop through all plugin routes and add them to the app
+pluginRoutes.forEach(function (r) {
+  app.use('/', r);
+});
 
 // post method to claim an address using verifymessage functionality
 app.post('/claim', function(req, res) {
@@ -104,42 +189,35 @@ app.post('/claim', function(req, res) {
       // show the captcha error
       res.json({'status': 'failed', 'error': true, 'message': 'The captcha validation failed'});
     } else {
-      // check if the bad-words filter is enabled
-      if (settings.claim_address_page.enable_bad_word_filter == true) {
-        // initialize the bad-words filter
-        var bad_word_lib = require('bad-words');
-        var bad_word_filter = new bad_word_lib();
-
-        // clean the message (Display name) of bad words
-        var message = (req.body.message == null || req.body.message == '' ? '' : bad_word_filter.clean(req.body.message));
-      } else {
-        // do not use the bad word filter
-        var message = (req.body.message == null || req.body.message == '' ? '' : req.body.message);
-      }
-
-      // check if the message was filtered
-      if (message == req.body.message) {
-        // call the verifymessage api
-        lib.verify_message(req.body.address, req.body.signature, req.body.message, function(body) {
-          if (body == false)
-            res.json({'status': 'failed', 'error': true, 'message': 'Invalid signature'});
-          else if (body == true) {
-            db.update_claim_name(req.body.address, req.body.message, function(val) {
-              // check if the update was successful
-              if (val == '')
-                res.json({'status': 'success'});
-              else if (val == 'no_address')
-                res.json({'status': 'failed', 'error': true, 'message': 'Wallet address ' + req.body.address + ' is not valid or does not have any transactions'});
-              else
-                res.json({'status': 'failed', 'error': true, 'message': 'Wallet address or signature is invalid'});
-            });
-          } else
-            res.json({'status': 'failed', 'error': true, 'message': 'Wallet address or signature is invalid'});
-        });
-      } else {
-        // message was filtered which would change the signature
-        res.json({'status': 'failed', 'error': true, 'message': 'Display name contains bad words and cannot be saved: ' + message});
-      }
+      // filter bad words if enabled
+      filter_bad_words((req.body.message == null || req.body.message == '' ? '' : req.body.message), function(claim_error, message) {
+        // check if there was an error or if the message was filtered
+        if (claim_error != null) {
+          // an error occurred with loading the bad-words filter
+          res.json({'status': 'failed', 'error': true, 'message': 'Error loading the bad-words filter: ' + claim_error});
+        } else if (message == req.body.message) {
+          // call the verifymessage api
+          lib.verify_message(req.body.address, req.body.signature, req.body.message, function(body) {
+            if (body == false)
+              res.json({'status': 'failed', 'error': true, 'message': 'Invalid signature'});
+            else if (body == true) {
+              db.update_claim_name(req.body.address, req.body.message, function(val) {
+                // check if the update was successful
+                if (val == '')
+                  res.json({'status': 'success'});
+                else if (val == 'no_address')
+                  res.json({'status': 'failed', 'error': true, 'message': 'Wallet address ' + req.body.address + ' is not valid or does not have any transactions'});
+                else
+                  res.json({'status': 'failed', 'error': true, 'message': 'Wallet address or signature is invalid'});
+              });
+            } else
+              res.json({'status': 'failed', 'error': true, 'message': 'Wallet address or signature is invalid'});
+          });
+        } else {
+          // message was filtered which would change the signature
+          res.json({'status': 'failed', 'error': true, 'message': 'Display name contains bad words and cannot be saved: ' + message});
+        }
+      });
     }
   });
 });
@@ -227,6 +305,122 @@ function validate_captcha(captcha_enabled, data, cb) {
   }
 }
 
+function filter_bad_words(msg, cb) {
+  // check if the bad-words filter is enabled
+  if (settings.claim_address_page.enable_bad_word_filter == true) {
+    // import the bad-words dependency
+    import('bad-words').then(function(module) {
+      // load the bad-words filter
+      const bad_word_lib = module.Filter;
+      const bad_word_filter = new bad_word_lib();
+
+       // return the filtered msg
+      return cb(null, bad_word_filter.clean(msg));
+    })
+    .catch(function(err) {
+      return cb(err, null);
+    });
+  } else {
+    // return the msg without filtering for bad words
+    return cb(null, msg);
+  }
+}
+
+// post method to receive data from a plugin
+app.post('/plugin-request', function(req, res) {
+  const pluginLockName = 'plugin';
+
+  // check if another plugin request is already running
+  if (lib.is_locked([pluginLockName], true) == true)
+    res.json({'status': 'failed', 'error': true, 'message': `Another plugin request is already running..`});
+  else {
+    // create a new plugin lock before checking the rest of the locks to minimize problems with running scripts at the same time
+    lib.create_lock(pluginLockName);
+
+    // check the backup, restore and delete locks since those functions would be problematic when updating data
+    if (lib.is_locked(['backup', 'restore', 'delete'], true) == true) {
+      lib.remove_lock(pluginLockName);
+      res.json({'status': 'failed', 'error': true, 'message': `Another script has locked the database..`});
+    } else {
+      // all lock tests passed. OK to run plugin request
+
+      let dataObject = {};
+
+      try {
+        // attempt to parse the POST data field into a JSON object
+        dataObject = JSON.parse(req.body.data);
+      } catch {
+        // do nothing. errors will be handled below
+      }
+
+      // check if the dataObject was populated
+      if (dataObject == null || JSON.stringify(dataObject) === '{}') {
+        lib.remove_lock(pluginLockName);
+        res.json({'status': 'failed', 'error': true, 'message': 'POST data is missing or not in the correct format'});
+      } else {
+        // check if the plugin secret code is correct and if the coin name was specified
+        if (dataObject.plugin_data == null || settings.plugins.plugin_secret_code != dataObject.plugin_data.secret_code) {
+          lib.remove_lock(pluginLockName);
+          res.json({'status': 'failed', 'error': true, 'message': 'Secret code is missing or incorrect'});
+        } else if (dataObject.plugin_data.coin_name == null || dataObject.plugin_data.coin_name == '') {
+          lib.remove_lock(pluginLockName);
+          res.json({'status': 'failed', 'error': true, 'message': 'Coin name is missing'});
+        } else {
+          const tableData = dataObject.table_data;
+
+          // check if the table_data seems valid
+          if (tableData == null || !Array.isArray(tableData)) {
+            lib.remove_lock(pluginLockName);
+            res.json({'status': 'failed', 'error': true, 'message': `table_data from POST data is missing or empty`});
+          } else {
+            const pluginName = (dataObject.plugin_data.plugin_name == null ? '' : dataObject.plugin_data.plugin_name);
+            const pluginObj = settings.plugins.allowed_plugins.find(item => item.plugin_name === pluginName && pluginName != '');
+
+            // check if the requested plugin was found in the settings
+            if (pluginObj == null) {
+              lib.remove_lock(pluginLockName);
+              res.json({'status': 'failed', 'error': true, 'message': `Plugin '${pluginName}' is not defined in settings`});
+            } else {
+              // check if the requested plugin is enabled
+              if (!pluginObj.enabled) {
+                lib.remove_lock(pluginLockName);
+                res.json({'status': 'failed', 'error': true, 'message': `Plugin '${pluginName}' is not enabled`});
+              } else {
+                // check if the plugin exists in the plugins directory
+                if (!db.fs.existsSync(`./plugins/${pluginName}`)) {
+                  lib.remove_lock(pluginLockName);
+                  res.json({'status': 'failed', 'error': true, 'message': `Plugin '${pluginName}' is not installed in the plugins directory`});
+                } else {
+                  // check if the plugin's server_functions file exists
+                  if (!db.fs.existsSync(`./plugins/${pluginName}/lib/server_functions.js`)) {
+                    lib.remove_lock(pluginLockName);
+                    res.json({'status': 'failed', 'error': true, 'message': `Plugin '${pluginName}' is missing the /lib/server_functions.js file`});
+                  } else {
+                    // load the server_functions.js file from the plugin
+                    const serverFunctions = require(`./plugins/${pluginName}/lib/server_functions`);
+
+                    // check if the process_plugin_request function exists
+                    if (typeof serverFunctions.process_plugin_request !== 'function') {
+                      lib.remove_lock(pluginLockName);
+                      res.json({'status': 'failed', 'error': true, 'message': `Plugin '${pluginName}' is missing the process_plugin_request function`});
+                    } else {
+                      // call the process_plugin_request function to process the new table data
+                      serverFunctions.process_plugin_request(dataObject.plugin_data.coin_name, tableData, settings.sync.update_timeout, function(response) {
+                        lib.remove_lock(pluginLockName);
+                        res.json(response);
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
 // extended apis
 app.use('/ext/getmoneysupply', function(req, res) {
   // check if the getmoneysupply api is enabled
@@ -237,7 +431,7 @@ app.use('/ext/getmoneysupply', function(req, res) {
       res.end((stats && stats.supply ? stats.supply.toString() : '0'));
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getaddress/:hash', function(req, res) {
@@ -288,7 +482,7 @@ app.use('/ext/getaddress/:hash', function(req, res) {
       });
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/gettx/:txid', function(req, res) {
@@ -306,37 +500,37 @@ app.use('/ext/gettx/:txid', function(req, res) {
           if (rtx && rtx.txid) {
             lib.prepare_vin(rtx, function(vin, tx_type_vin) {
               lib.prepare_vout(rtx.vout, rtx.txid, vin, ((typeof rtx.vjoinsplit === 'undefined' || rtx.vjoinsplit == null) ? [] : rtx.vjoinsplit), function(rvout, rvin, tx_type_vout) {
-                lib.calculate_total(rvout, function(total) {
-                  if (!rtx.confirmations > 0) {
-                    var utx = {
-                      txid: rtx.txid,
-                      vin: rvin,
-                      vout: rvout,
-                      total: total.toFixed(8),
-                      timestamp: rtx.time,
-                      blockhash: '-',
-                      blockindex: -1,
-                      ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
-                    };
+                const total = lib.calculate_total(rvout);
 
-                    res.send({ active: 'tx', tx: utx, confirmations: rtx.confirmations, blockcount:-1});
-                  } else {
-                    var utx = {
-                      txid: rtx.txid,
-                      vin: rvin,
-                      vout: rvout,
-                      total: total.toFixed(8),
-                      timestamp: rtx.time,
-                      blockhash: rtx.blockhash,
-                      blockindex: rtx.blockheight,
-                      ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
-                    };
+                if (!rtx.confirmations > 0) {
+                  var utx = {
+                    txid: rtx.txid,
+                    vin: rvin,
+                    vout: rvout,
+                    total: total.toFixed(8),
+                    timestamp: rtx.time,
+                    blockhash: '-',
+                    blockindex: -1,
+                    ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
+                  };
 
-                    lib.get_blockcount(function(blockcount) {
-                      res.send({ active: 'tx', tx: utx, confirmations: rtx.confirmations, blockcount: (blockcount ? blockcount : 0)});
-                    });
-                  }
-                });
+                  res.send({ active: 'tx', tx: utx, confirmations: rtx.confirmations, blockcount:-1});
+                } else {
+                  var utx = {
+                    txid: rtx.txid,
+                    vin: rvin,
+                    vout: rvout,
+                    total: total.toFixed(8),
+                    timestamp: rtx.time,
+                    blockhash: rtx.blockhash,
+                    blockindex: rtx.blockheight,
+                    ringsize: rtx.vin && rtx.vin.length && rtx.vin[0].ringsize || 0
+                  };
+
+                  lib.get_blockcount(function(blockcount) {
+                    res.send({ active: 'tx', tx: utx, confirmations: rtx.confirmations, blockcount: (blockcount ? blockcount : 0)});
+                  });
+                }
               });
             });
           } else
@@ -345,7 +539,7 @@ app.use('/ext/gettx/:txid', function(req, res) {
       }
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getbalance/:hash', function(req, res) {
@@ -359,7 +553,7 @@ app.use('/ext/getbalance/:hash', function(req, res) {
         res.send({ error: 'address not found.', hash: req.params.hash });
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getdistribution', function(req, res) {
@@ -373,7 +567,7 @@ app.use('/ext/getdistribution', function(req, res) {
       });
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getcurrentprice', function(req, res) {
@@ -386,7 +580,7 @@ app.use('/ext/getcurrentprice', function(req, res) {
       res.send(p_ext);
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getbasicstats', function(req, res) {
@@ -410,7 +604,7 @@ app.use('/ext/getbasicstats', function(req, res) {
       }
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getlasttxs/:min', function(req, res) {
@@ -463,7 +657,7 @@ app.use('/ext/getlasttxs/:min', function(req, res) {
       }
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getaddresstxs/:address/:start/:length', function(req, res) {
@@ -535,7 +729,7 @@ app.use('/ext/getaddresstxs/:address/:start/:length', function(req, res) {
       }
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 function get_connection_and_block_counts(get_data, cb) {
@@ -583,7 +777,7 @@ app.use('/ext/getsummary', function(req, res) {
                     difficulty = difficulty['proof-of-stake'];
                 }
 
-                if (hashrate == 'There was an error. Check your console.')
+                if (hashrate == `${settings.localization.ex_error}: ${settings.localization.check_console}`)
                   hashrate = 0;
 
                 let mn_total = 0;
@@ -620,7 +814,7 @@ app.use('/ext/getsummary', function(req, res) {
       });
     }
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getnetworkpeers', function(req, res) {
@@ -651,7 +845,7 @@ app.use('/ext/getnetworkpeers', function(req, res) {
       res.json(peers);
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 // get the list of masternodes from local collection
@@ -670,7 +864,7 @@ app.use('/ext/getmasternodelist', function(req, res) {
       res.send(masternodes);
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 // returns a list of masternode reward txs for a single masternode address from a specific block height
@@ -696,7 +890,7 @@ app.use('/ext/getmasternoderewards/:hash/:since', function(req, res) {
         res.send({error: "failed to retrieve masternode rewards", hash: req.params.hash, since: req.params.since});
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 // returns the total masternode rewards received for a single masternode address from a specific block height
@@ -711,7 +905,7 @@ app.use('/ext/getmasternoderewardstotal/:hash/:since', function(req, res) {
         res.send({error: "failed to retrieve masternode rewards", hash: req.params.hash, since: req.params.since});
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 // get the list of orphans from local collection
@@ -744,7 +938,7 @@ app.use('/ext/getorphanlist/:start/:length', function(req, res) {
       res.json({"data": data, "recordsTotal": count, "recordsFiltered": count});
     });
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 // get the last updated date for a particular section
@@ -767,7 +961,7 @@ app.use('/ext/getlastupdated/:section', function(req, res) {
         res.send({error: 'Cannot find last updated date'});
     }
   } else
-    res.end('This method is disabled');
+    res.end(settings.localization.method_disabled);
 });
 
 app.use('/ext/getnetworkchartdata', function(req, res) {
@@ -787,7 +981,7 @@ app.use('/system/restartexplorer', function(req, res, next) {
     res.end();
   } else {
     // show the error page
-    var err = new Error('Not Found');
+    var err = new Error(settings.localization.error_not_found);
     err.status = 404;
     next(err);
   }
@@ -936,7 +1130,7 @@ settings.api_page.public_apis.rpc.getmasternodelist = { "enabled": false };
 
 // locals
 app.set('explorer_version', package_metadata.version);
-app.set('locale', locale);
+app.set('localization', settings.localization);
 app.set('coin', settings.coin);
 app.set('network_history', settings.network_history);
 app.set('shared_pages', settings.shared_pages);
@@ -958,6 +1152,7 @@ app.set('labels', settings.labels);
 app.set('default_coingecko_ids', settings.default_coingecko_ids);
 app.set('api_cmds', settings.api_cmds);
 app.set('blockchain_specific', settings.blockchain_specific);
+app.set('plugins', settings.plugins);
 
 // determine panel offset based on which panels are enabled
 var paneltotal = 5;
